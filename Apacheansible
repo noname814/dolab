@@ -32,3 +32,5 @@
       service:
         name: apache2
         state: restarted
+
+run:--ask-become-pass
