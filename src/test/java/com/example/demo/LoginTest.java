@@ -4,7 +4,8 @@ import com.example.demo.controller.MainController;
 import com.example.demo.model.User;
 import com.example.demo.repository.UserRepo;
 import com.example.demo.repository.BookRepo;
-
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.hamcrest.Matchers.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -28,30 +29,30 @@ public class LoginTest {
     private BookRepo bookRepo;
 
     @Test
-    void testLoginSuccess() throws Exception {
+void testLoginSuccess() throws Exception {
 
-        User user = new User();
-        user.setUsername("admin");
-        user.setPassword("123");
+    User user = new User();
+    user.setUsername("admin");
+    user.setPassword("123");
 
-        when(userRepo.findByUsernameAndPassword("admin", "123"))
-                .thenReturn(user);
+    when(userRepo.findByUsernameAndPassword("admin", "123"))
+            .thenReturn(user);
 
-        mockMvc.perform(post("/login")
-                .param("username", "admin")
-                .param("password", "123"))
-                .andExpect(status().is3xxRedirection());
-    }
+    mockMvc.perform(post("/login")
+            .param("username", "admin")
+            .param("password", "123"))
+            .andExpect(redirectedUrl("/addBook")); // ✅ simple
+}
 
-    @Test
-    void testLoginFailure() throws Exception {
+@Test
+void testLoginFailure() throws Exception {
 
-        when(userRepo.findByUsernameAndPassword("admin", "wrong"))
-                .thenReturn(null);
+    when(userRepo.findByUsernameAndPassword("admin", "wrong"))
+            .thenReturn(null);
 
-        mockMvc.perform(post("/login")
-                .param("username", "admin")
-                .param("password", "wrong"))
-                .andExpect(status().isOk());
-    }
+    mockMvc.perform(post("/login")
+            .param("username", "admin")
+            .param("password", "wrong"))
+            .andExpect(content().string(containsString("Invalid login"))); // ✅ simple
+}
 }
