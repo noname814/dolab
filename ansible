@@ -1,0 +1,22 @@
+- name: Echo
+  hosts: servers
+  tasks:
+    - name: Print message
+      debug:
+        msg: "Hello"
+
+
+
+
+ sudo apt install ansible -y
+ sudo apt install openssh-server openssh-client
+ sudo service ssh start
+ ssh-keygen -t rsa -b 4096
+ssh-copy-id -i ~/.ssh/id_rsa.pub dell@localhost
+nano inventory
+[servers]
+127.0.0.1
+ansible all -i inventory -m ping
+ansible-playbook -i inventory playbook.yaml 
+
+replace dell with user
