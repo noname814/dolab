@@ -34,3 +34,33 @@
         state: restarted
 
 run:--ask-become-pass
+
+
+
+
+trigger:
+- main
+
+jobs:
+- job: JobA
+  displayName: "First Job"
+  pool:
+    vmImage: 'ubuntu-latest'
+  steps:
+  - script: echo "Running Job A"
+
+- job: JobB
+  displayName: "Second Job"
+  dependsOn: JobA
+  pool:
+    vmImage: 'ubuntu-latest'
+  steps:
+  - script: echo "Running Job B after Job A"
+
+- job: JobC
+  displayName: "Third Job"
+  dependsOn: JobB
+  pool:
+    vmImage: 'ubuntu-latest'
+  steps:
+  - script: echo "Running Job C after Job B"
