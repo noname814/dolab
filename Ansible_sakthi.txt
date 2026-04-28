@@ -1,0 +1,691 @@
+noname
+
+Yes — this is absolutely possible (and very common) to do in **Windows Subsystem for Linux**. In fact, WSL is one of the easiest ways to practice Ansible on a Windows machine because it gives you a full Linux environment.
+
+Below is a **cleaned-up, corrected, and complete version** of your experiment with **missing steps added and errors fixed**.
+
+---
+
+# ✅ Running Ansible in WSL (Complete Guide)
+
+## 🔹 Step 0: Install WSL (if not already)
+
+On Windows PowerShell (Admin):
+
+```powershell
+wsl --install
+```
+
+Restart your system and open Ubuntu from Start menu.
+
+---
+
+## 🔹 Step 1: Update System
+
+```bash
+sudo apt update && sudo apt upgrade -y
+```
+
+---
+
+## 🔹 Step 2: Install Ansible
+
+```bash
+sudo apt install software-properties-common -y
+sudo add-apt-repository --yes --update ppa:ansible/ansible
+sudo apt install ansible -y
+```
+
+---
+
+## 🔹 Step 3: Verify Installation
+
+```bash
+ansible --version
+```
+
+### ⚠️ UTF-8 Error Fix (if occurs)
+
+```bash
+sudo update-locale LANG=en_US.UTF-8 LC_CTYPE=en_US.UTF-8
+```
+
+Then restart WSL:
+
+```bash
+wsl --shutdown
+```
+
+---
+
+## 🔹 Step 4: Install SSH (IMPORTANT – Missing Step)
+
+WSL usually doesn’t include SSH client tools by default:
+
+```bash
+sudo apt install openssh-client openssh-server -y
+```
+
+Start SSH service:
+
+```bash
+sudo service ssh start
+```
+
+---
+
+## 🔹 Step 5: Create SSH Key
+
+```bash
+ssh-keygen -t rsa -b 4096 -C "devops default"
+```
+
+Check keys:
+
+```bash
+ls -la ~/.ssh
+cat ~/.ssh/id_rsa.pub
+```
+
+---
+
+## 🔹 Step 6: Copy SSH Key to Target Machine
+
+```bash
+ssh-copy-id user@<ipaddress> eg:noname@localhost
+or
+ssh-copy-id -i ~/.ssh/mykey.pub noname@localhost
+```
+
+👉 If `ssh-copy-id` not found:
+
+```bash
+sudo apt install sshpass -y
+```
+
+---
+
+## 🔹 Step 7: Test SSH Connection
+
+```bash
+ssh user@<ipaddress>
+```
+
+### ⚠️ Fix: Connection Refused
+
+On target machine:
+
+```bash
+sudo apt install openssh-server -y
+sudo systemctl enable ssh
+sudo systemctl restart ssh
+```
+
+---
+
+## 🔹 Step 8: Create Inventory File
+
+```bash
+nano inventory
+```
+
+Example:
+
+```ini
+[servers]
+192.168.1.219
+192.168.1.218
+```
+[servers]
+127.0.0.1 ansible_user=noname
+
+👉 Better version (recommended):
+
+```ini
+[servers]
+192.168.1.219 ansible_user=ubuntu
+192.168.1.218 ansible_user=ubuntu
+```
+
+---
+
+## 🔹 Step 9: Test Inventory Connectivity
+
+```bash
+ansible all -i inventory -m ping --private-key ~/.ssh/id_rsa
+```
+
+### ⚠️ Fix Permission Error
+
+```bash
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/id_rsa
+```
+
+---
+
+## 🔹 Step 10: Create Playbook
+
+```bash
+nano playbook.yml
+```
+
+Corrected playbook:
+
+```yaml
+---
+- name: Echo
+  hosts: servers
+  tasks:
+    - name: Print message
+      debug:
+        msg: "Hello from Ansible!"
+```
+
+👉 Fix:
+
+* `connection: local` ❌ (removed — wrong for remote servers)
+* Added `become: yes` for privilege escalation
+
+---
+
+## 🔹 Step 11: Run Playbook
+
+```bash
+ansible-playbook -i inventory playbook.yml --private-key ~/.ssh/id_rsa
+```
+
+---
+
+# 🔥 Important WSL Notes (Very Important)
+
+### ⚠️ 1. WSL Networking
+
+* WSL and your target machine must be on same network
+* Use `ip a` to check WSL IP
+
+### ⚠️ 2. Use Real Remote Machine
+
+Ansible needs:
+
+* Another Linux VM OR
+* Cloud VM OR
+* Same machine via SSH (localhost workaround)
+
+👉 Local test:
+
+```ini
+[servers]
+localhost ansible_connection=local
+```
+
+---
+
+### ⚠️ 3. Windows Firewall
+
+May block SSH:
+
+* Allow port **22**
+
+---
+
+# ✅ Final Verdict
+
+✔ Yes, fully possible in WSL
+✔ Works exactly like Linux
+✔ Best for DevOps practice
+
+---
+
+# 💡 Bonus (Optional Improvement)
+
+Install useful tools:
+
+```bash
+sudo apt install tree git curl -y
+```
+
+---
+
+If you want, I can:
+
+* Show how to run Ansible using **Docker instead of WSL**
+* Help you create a **real-world playbook (install nginx, deploy app, etc.)**
+* Or help you set up **2 VMs for a proper lab**
+
+
+
+Great questions — you’re very close, just a couple of concepts need tightening. Let’s break it down clearly.
+
+---
+
+# 🔐 Why is an SSH key used?
+
+SSH keys are used for **secure, password-less authentication** between machines.
+
+Instead of typing a password every time, SSH uses a **key pair**:
+
+* **Private key** → stays on the control node (host)
+* **Public key** → copied to the managed node (server)
+
+---
+
+# 🤔 Your Understanding (Fixing It)
+
+You said:
+
+> “does host generate key and give public key to node so that the node will know it can be trusted?”
+
+✅ **Almost correct — but slightly reversed in meaning**
+
+✔ What actually happens:
+
+* The **host (Ansible control node)** generates the key pair
+* The **public key is copied to the node**
+* The **node trusts the host**, not the other way around
+
+👉 So:
+
+* Node says: *“If someone has the matching private key, I will allow access”*
+* Host proves identity by using its **private key**
+
+---
+
+# 🔑 How Authentication Works (Simple Flow)
+
+1. Host connects to node via SSH
+2. Node checks:
+
+   * “Do I have this public key in `~/.ssh/authorized_keys`?”
+3. If YES:
+
+   * Node sends a challenge
+4. Host proves it has the **private key**
+5. ✅ Access granted (no password needed)
+
+---
+
+# 🖥️ Does SSH need to run on both host and node?
+
+👉 **Yes — but different roles**
+
+### On Host (Control Node)
+
+* Needs **SSH client**
+* Used to initiate connection
+
+### On Node (Managed Node)
+
+* Needs **SSH server (`sshd`)**
+* Listens for incoming connections
+
+👉 Summary:
+
+* Host → connects
+* Node → accepts connection
+
+---
+
+# 💻 Can host and node run on the same computer?
+
+👉 **Yes, absolutely!** (very common for practice)
+
+---
+
+## ✅ Option 1: Localhost (Simplest)
+
+No SSH needed:
+
+Inventory:
+
+```ini
+[servers]
+localhost ansible_connection=local
+```
+
+---
+
+## ✅ Option 2: SSH to Same Machine
+
+You can simulate a real setup:
+
+```bash
+ssh localhost
+```
+
+For this:
+
+* SSH server must be running on your machine
+
+---
+
+## ✅ Option 3: WSL + VM (Best Practice Setup)
+
+* WSL = host (Ansible control node)
+* Virtual Machine = node
+
+---
+
+# 🔥 Real-World Analogy
+
+Think of it like this:
+
+* Public key = **lock on the door**
+* Private key = **your personal key**
+
+You:
+
+* Install your lock (public key) on many servers
+* Keep your key (private key) safe
+* Any server with your lock lets you in **only if your key matches**
+
+---
+
+# ⚠️ Common Misconception
+
+❌ “Node verifies host is trusted”
+✔ Actually: **Node verifies the user (host) has the private key**
+
+---
+
+# ✅ Final Summary
+
+* SSH keys replace passwords with cryptographic authentication
+* Host generates key pair
+* Public key goes to node
+* Private key stays secret on host
+* SSH client → host
+* SSH server → node
+* Same machine setup is totally possible
+
+---
+
+If you want, I can show:
+
+* A **diagram of SSH authentication**
+* How Ansible uses SSH internally step-by-step
+* Or a **common viva answer** for this exact question 👍
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+noname@DESKTOP-QHA9GQL:/mnt/c/Users/USER$ sudo apt install openssh-client openssh-server
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+openssh-client is already the newest version (1:9.6p1-3ubuntu13.15).
+openssh-client set to manually installed.
+The following package was automatically installed and is no longer required:
+  libllvm19
+Use 'sudo apt autoremove' to remove it.
+The following additional packages will be installed:
+  libwrap0 ncurses-term openssh-sftp-server ssh-import-id
+Suggested packages:
+  molly-guard monkeysphere ssh-askpass ufw
+The following NEW packages will be installed:
+  libwrap0 ncurses-term openssh-server openssh-sftp-server ssh-import-id
+0 upgraded, 5 newly installed, 0 to remove and 37 not upgraded.
+Need to get 880 kB of archives.
+After this operation, 6853 kB of additional disk space will be used.
+Do you want to continue? [Y/n] y
+Get:1 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 openssh-sftp-server amd64 1:9.6p1-3ubuntu13.15 [37.3 kB]
+Get:2 http://archive.ubuntu.com/ubuntu noble/main amd64 libwrap0 amd64 7.6.q-33 [47.9 kB]
+Get:3 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 openssh-server amd64 1:9.6p1-3ubuntu13.15 [510 kB]
+Get:4 http://archive.ubuntu.com/ubuntu noble/main amd64 ncurses-term all 6.4+20240113-1ubuntu2 [275 kB]
+Get:5 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 ssh-import-id all 5.11-0ubuntu2.24.04.1 [10.1 kB]
+Fetched 880 kB in 2s (572 kB/s)
+Preconfiguring packages ...
+Selecting previously unselected package openssh-sftp-server.
+(Reading database ... 70019 files and directories currently installed.)
+Preparing to unpack .../openssh-sftp-server_1%3a9.6p1-3ubuntu13.15_amd64.deb ...
+Unpacking openssh-sftp-server (1:9.6p1-3ubuntu13.15) ...
+Selecting previously unselected package libwrap0:amd64.
+Preparing to unpack .../libwrap0_7.6.q-33_amd64.deb ...
+Unpacking libwrap0:amd64 (7.6.q-33) ...
+Selecting previously unselected package openssh-server.
+Preparing to unpack .../openssh-server_1%3a9.6p1-3ubuntu13.15_amd64.deb ...
+Unpacking openssh-server (1:9.6p1-3ubuntu13.15) ...
+Selecting previously unselected package ncurses-term.
+Preparing to unpack .../ncurses-term_6.4+20240113-1ubuntu2_all.deb ...
+Unpacking ncurses-term (6.4+20240113-1ubuntu2) ...
+Selecting previously unselected package ssh-import-id.
+Preparing to unpack .../ssh-import-id_5.11-0ubuntu2.24.04.1_all.deb ...
+Unpacking ssh-import-id (5.11-0ubuntu2.24.04.1) ...
+Setting up openssh-sftp-server (1:9.6p1-3ubuntu13.15) ...
+Setting up ssh-import-id (5.11-0ubuntu2.24.04.1) ...
+Setting up libwrap0:amd64 (7.6.q-33) ...
+Setting up ncurses-term (6.4+20240113-1ubuntu2) ...
+Setting up openssh-server (1:9.6p1-3ubuntu13.15) ...
+
+Creating config file /etc/ssh/sshd_config with new version
+Creating SSH2 RSA key; this may take some time ...
+3072 SHA256:l7dley29RRgpJ1zG8i2ITOUoGZd6kr6VJucE22PTz8E root@DESKTOP-QHA9GQL (RSA)
+Creating SSH2 ECDSA key; this may take some time ...
+256 SHA256:Pkn8vaJ9Bm5pnXXJ/fT3R5rkBtAKJd+sEtGFDyQwRmE root@DESKTOP-QHA9GQL (ECDSA)
+Creating SSH2 ED25519 key; this may take some time ...
+256 SHA256:pZftBOYvAGEdySskNSFzeiW6GqVAdXfMuW+7enxmjTI root@DESKTOP-QHA9GQL (ED25519)
+Created symlink /etc/systemd/system/sockets.target.wants/ssh.socket → /usr/lib/systemd/system/ssh.socket.
+Created symlink /etc/systemd/system/ssh.service.requires/ssh.socket → /usr/lib/systemd/system/ssh.socket.
+Processing triggers for man-db (2.12.0-4build2) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.7) ...
+                                         
+noname@DESKTOP-QHA9GQL:/mnt/c/Users/USER$ cd ~
+noname@DESKTOP-QHA9GQL:~$ ls
+noname@DESKTOP-QHA9GQL:~$ ls
+noname@DESKTOP-QHA9GQL:~$ cd ..
+noname@DESKTOP-QHA9GQL:/home$ ls
+noname
+noname@DESKTOP-QHA9GQL:/home$ cd noname
+noname@DESKTOP-QHA9GQL:~$ ls
+noname@DESKTOP-QHA9GQL:~$ Creating config file /etc/ssh/sshd_config with new version
+eating SSH2 RSA key; this may take some time ...
+3072 SHA256:l7dley29RRgpJ1zG8i2ITOUoGZd6kr6VJucE22PTz8E root@DESKTOP-QHA9GQL (RSA)
+Creating SSH2 ECDSA key; this may take some time ...
+256 SHA256:Pkn8vaJ9Bm5pnXXJ/fT3R5rkBtAKJd+sEtGFDyQwRmE root@DESKTOP-QHA9GQL (ECDSA)
+Creating SSH2 ED25519 key; this may take some time ...
+256 SHA256:pZftBOYvAGEdySskNSFzeiW6GqVAdXfMuW+7enxmjTI root@DESKTOP-QHA9GQL (ED25519)
+Created symlink /etc/systemd/system/sockets.target.wants/ssh.socket → /usr/lib/systemd/system/ssh.socket.
+Created symlink /etc/systemd/system/ssh.service.requires/ssh.socket → /usr/lib/systemd/system/ssh.socket.
+Processing triggers for man-db (2.12.0-4build2) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.7) ...Creating: command not found
+noname@DESKTOP-QHA9GQL:~$ Creating SSH2 RSA key; this may take some time ...
+Creating: command not found
+Command 'this' not found, did you mean:
+  command 'thin' from deb thin (1.8.1-2ubuntu1)
+Try: sudo apt install <deb name>
+noname@DESKTOP-QHA9GQL:~$ 3072 SHA256:l7dley29RRgpJ1zG8i2ITOUoGZd6kr6VJucE22PTz8E root@DESKTOP-QHA9GQL (RSA)
+-bash: syntax error near unexpected token `('
+noname@DESKTOP-QHA9GQL:~$ Creating SSH2 ECDSA key; this may take some time ...
+Creating: command not found
+Command 'this' not found, did you mean:
+  command 'thin' from deb thin (1.8.1-2ubuntu1)
+Try: sudo apt install <deb name>
+noname@DESKTOP-QHA9GQL:~$ 256 SHA256:Pkn8vaJ9Bm5pnXXJ/fT3R5rkBtAKJd+sEtGFDyQwRmE root@DESKTOP-QHA9GQL (ECDSA)
+-bash: syntax error near unexpected token `('
+noname@DESKTOP-QHA9GQL:~$ Creating SSH2 ED25519 key; this may take some time ...
+Creating: command not found
+Command 'this' not found, did you mean:
+  command 'thin' from deb thin (1.8.1-2ubuntu1)
+Try: sudo apt install <deb name>
+noname@DESKTOP-QHA9GQL:~$ 256 SHA256:pZftBOYvAGEdySskNSFzeiW6GqVAdXfMuW+7enxmjTI root@DESKTOP-QHA9GQL (ED25519)
+-bash: syntax error near unexpected token `('
+noname@DESKTOP-QHA9GQL:~$ Created symlink /etc/systemd/system/sockets.target.wants/ssh.socket → /usr/lib/systemd/system/ssh.socket.
+Created: command not found
+noname@DESKTOP-QHA9GQL:~$ Created symlink /etc/systemd/system/ssh.service.requires/ssh.socket → /usr/lib/systemd/system/ssh.socket.
+Created: command not found
+noname@DESKTOP-QHA9GQL:~$ Processing triggers for man-db (2.12.0-4build2) ...
+-bash: syntax error near unexpected token `('
+noname@DESKTOP-QHA9GQL:~$ ssh-keygen -t rsa -b 4096 -C "devops"
+Generating public/private rsa key pair.
+Enter file in which to save the key (/home/noname/.ssh/id_rsa): ^C
+noname@DESKTOP-QHA9GQL:~$ ssh-keygen -t rsa -b 4096 -C "devops"
+Generating public/private rsa key pair.
+Enter file in which to save the key (/home/noname/.ssh/id_rsa): devops
+Enter passphrase (empty for no passphrase):
+Enter same passphrase again:
+Your identification has been saved in devops
+Your public key has been saved in devops.pub
+The key fingerprint is:
+SHA256:sdsMU+2HwRAzl4jm05Yd6A2iNjS/ovxRCylBSP4hL1I devops
+The key's randomart image is:
++---[RSA 4096]----+
+| ....    .=+..   |
+| ...  o + +Bo    |
+|  E o. *.+.=+.   |
+| . + o+.++=.oo   |
+|. . +.o.S+  o .  |
+| . . ..o.B   .   |
+|   . ...o o      |
+|    o  .         |
+|     ..          |
++----[SHA256]-----+
+noname@DESKTOP-QHA9GQL:~$ ls
+devops  devops.pub
+noname@DESKTOP-QHA9GQL:~$ devops
+devops: command not found
+noname@DESKTOP-QHA9GQL:~$ vi devops
+noname@DESKTOP-QHA9GQL:~$ sudo service ssh start
+noname@DESKTOP-QHA9GQL:~$ ssh-copy-id noname@localhost
+/usr/bin/ssh-copy-id: ERROR: No identities found
+noname@DESKTOP-QHA9GQL:~$ ssh-keygen -t rsa -b 4096 -C "devops"
+Generating public/private rsa key pair.
+Enter file in which to save the key (/home/noname/.ssh/id_rsa):
+Created directory '/home/noname/.ssh'.
+Enter passphrase (empty for no passphrase):
+Enter same passphrase again:
+Your identification has been saved in /home/noname/.ssh/id_rsa
+Your public key has been saved in /home/noname/.ssh/id_rsa.pub
+The key fingerprint is:
+SHA256:9xit+nM9sEcWaoc24cRtFQzgmua1dAJk/MdH2Gdd0JA devops
+The key's randomart image is:
++---[RSA 4096]----+
+|        .o ...B*=|
+|        o..  .E+*|
+|         ..o...o.|
+|          +o+o+. |
+|        S+o*o*.. |
+|        o.o=% +  |
+|         .o+.O   |
+|         .. o +  |
+|        ...o . . |
++----[SHA256]-----+
+noname@DESKTOP-QHA9GQL:~$ ls
+devops  devops.pub
+noname@DESKTOP-QHA9GQL:~$ cd .ssh
+noname@DESKTOP-QHA9GQL:~/.ssh$ ls
+id_rsa  id_rsa.pub
+noname@DESKTOP-QHA9GQL:~/.ssh$ cd ..
+noname@DESKTOP-QHA9GQL:~$ ssh-copy-id noname@localhost
+/usr/bin/ssh-copy-id: INFO: Source of key(s) to be installed: "/home/noname/.ssh/id_rsa.pub"
+The authenticity of host 'localhost (127.0.0.1)' can't be established.
+ED25519 key fingerprint is SHA256:pZftBOYvAGEdySskNSFzeiW6GqVAdXfMuW+7enxmjTI.
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+/usr/bin/ssh-copy-id: INFO: attempting to log in with the new key(s), to filter out any that are already installed
+/usr/bin/ssh-copy-id: INFO: 1 key(s) remain to be installed -- if you are prompted now it is to install the new keys
+noname@localhost's password:
+
+Number of key(s) added: 1
+
+Now try logging into the machine, with:   "ssh 'noname@localhost'"
+and check to make sure that only the key(s) you wanted were added.
+
+noname@DESKTOP-QHA9GQL:~$ ssh noname@localhost
+Welcome to Ubuntu 24.04.3 LTS (GNU/Linux 6.6.87.2-microsoft-standard-WSL2 x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Tue Apr  7 00:58:43 UTC 2026
+
+  System load:  0.0                 Processes:             33
+  Usage of /:   1.3% of 1006.85GB   Users logged in:       1
+  Memory usage: 11%                 IPv4 address for eth0: 172.26.155.96
+  Swap usage:   0%
+
+ * Strictly confined Kubernetes makes edge and IoT secure. Learn how MicroK8s
+   just raised the bar for easy, resilient and secure K8s cluster deployment.
+
+   https://ubuntu.com/engage/secure-kubernetes-at-the-edge
+noname@DESKTOP-QHA9GQL:~$ nano inventory
+noname@DESKTOP-QHA9GQL:~$ ls
+devops  devops.pub  inventory
+noname@DESKTOP-QHA9GQL:~$ vi inventory
+noname@DESKTOP-QHA9GQL:~$ ansible all -i inventory -m ping --private-key ~/.ssh/id_rsa
+The authenticity of host '127.0.0.1 (127.0.0.1)' can't be established.
+ED25519 key fingerprint is SHA256:pZftBOYvAGEdySskNSFzeiW6GqVAdXfMuW+7enxmjTI.
+This host key is known by the following other names/addresses:
+    ~/.ssh/known_hosts:1: [hashed name]
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+127.0.0.1 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+noname@DESKTOP-QHA9GQL:~$ nano playbook.yml
+noname@DESKTOP-QHA9GQL:~$ ansible-playbook -i inventory playbook.yml --private-key ~/.ssh/id_rsa
+
+PLAY [Echo] ************************************************************************************************************
+
+TASK [Gathering Facts] *************************************************************************************************
+fatal: [127.0.0.1]: FAILED! => {"msg": "Missing sudo password"}
+
+PLAY RECAP *************************************************************************************************************
+127.0.0.1                  : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0
+
+noname@DESKTOP-QHA9GQL:~$ nano playbook.yml
+noname@DESKTOP-QHA9GQL:~$ ansible-playbook -i inventory playbook.yml --private-key ~/.ssh/id_rsa
+
+PLAY [Echo] ************************************************************************************************************
+
+TASK [Gathering Facts] *************************************************************************************************
+ok: [127.0.0.1]
+
+TASK [Print message] ***************************************************************************************************
+ok: [127.0.0.1] => {
+    "msg": "Hello from Ansible!"
+}
+
+PLAY RECAP *************************************************************************************************************
+127.0.0.1                  : ok=2    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+
+noname@DESKTOP-QHA9GQL:~$
+
+
+
+
+
+
+
+
+generate a simple toilet locator webapp with springboot,jpa,mysql,thymeeaf. it should have only controler,model,repo folder. no service folder. dont use complex csss. simple css or n css. the user must be able to find nearby bathroom based on their coordinates in google map. they must be able to register and give rating and issue. and admn must be able to add maintainence. keep the db simple. user db:id,username,password. rating db:toilet address, user id, rating. issue: toilet address, user id, issue. maintain:toilet address, admin id, cleaner name
+
+
